@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv/
+env/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+.npm
+dist/
+
+# Binaries & Checkpoints
+cloudflared.exe
+*.log
+ml/checkpoints/*.pt
+backend/data/reports/*.pdf
