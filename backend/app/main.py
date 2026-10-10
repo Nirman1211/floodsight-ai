@@ -9,7 +9,7 @@ from app.api.endpoints import router as api_router
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Multimodal Geospatial AI Disaster Decision-Support Platform (IIT Mandi Hackathon 2026 Track B)",
+    description="Multimodal Geospatial AI Disaster Decision-Support Platform for Flood Mapping & Settlement Isolation",
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
