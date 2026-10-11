@@ -1,15 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { Layers } from 'lucide-react';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { Layers, Info, Key, Globe, RotateCcw, X, Check, ExternalLink } from 'lucide-react';
 import type { AnalysisResult } from '../types/analysis';
 
 interface MapViewerProps {
   result: AnalysisResult;
 }
 
+type BasemapType = 'satellite' | 'streets' | 'dark';
+
 export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+
+  const [activeBasemap, setActiveBasemap] = useState<BasemapType>('satellite');
+  const [showApiInfoModal, setShowApiInfoModal] = useState<boolean>(false);
+  const [customApiKey, setCustomApiKey] = useState<string>(() => {
+    return localStorage.getItem('floodsight_maptiler_key') || '';
+  });
+  const [savedKeySuccess, setSavedKeySuccess] = useState<boolean>(false);
 
   const [layersState, setLayersState] = useState({
     flood: true,
@@ -22,27 +32,61 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Center map around Trishuli Valley [85.25, 28.05]
+    // Center map around Trishuli Valley [85.27, 28.08]
     const initialMap = new maplibregl.Map({
       container: mapContainer.current,
       style: {
         version: 8,
         sources: {
-          osm: {
+          'esri-satellite': {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-              'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors, © CARTO',
+            maxzoom: 19,
+            attribution: '© Esri, Maxar, Earthstar Geographics',
+          },
+          'osm-streets': {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: '© OpenStreetMap contributors',
+          },
+          'carto-dark': {
+            type: 'raster',
+            tiles: [
+              'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+              'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: '© OpenStreetMap, © CARTO',
           },
         },
         layers: [
           {
-            id: 'osm-tiles',
+            id: 'esri-satellite-layer',
             type: 'raster',
-            source: 'osm',
+            source: 'esri-satellite',
+            layout: { visibility: 'visible' },
+            minzoom: 0,
+            maxzoom: 19,
+          },
+          {
+            id: 'osm-streets-layer',
+            type: 'raster',
+            source: 'osm-streets',
+            layout: { visibility: 'none' },
+            minzoom: 0,
+            maxzoom: 19,
+          },
+          {
+            id: 'carto-dark-layer',
+            type: 'raster',
+            source: 'carto-dark',
+            layout: { visibility: 'none' },
             minzoom: 0,
             maxzoom: 19,
           },
@@ -52,9 +96,12 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
       zoom: 10.8,
     });
 
-    initialMap.addControl(new maplibregl.NavigationControl(), 'top-right');
+    initialMap.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
 
     initialMap.on('load', () => {
+      // Trigger canvas resize to guarantee full container rendering
+      initialMap.resize();
+
       // 1. Flood Inundation & Sediment Layer
       if (result.flood_geojson) {
         initialMap.addSource('flood-data', {
@@ -77,7 +124,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
           type: 'line',
           source: 'flood-data',
           paint: {
-            'line-color': '#1d4ed8',
+            'line-color': '#60a5fa',
             'line-width': 2,
           },
         });
@@ -167,10 +214,54 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
 
     map.current = initialMap;
 
+    // Resize observer to ensure map adjusts automatically when container dimensions change
+    const resizeObserver = new ResizeObserver(() => {
+      if (initialMap) {
+        initialMap.resize();
+      }
+    });
+
+    if (mapContainer.current) {
+      resizeObserver.observe(mapContainer.current);
+    }
+
     return () => {
+      resizeObserver.disconnect();
       initialMap.remove();
     };
   }, [result]);
+
+  // Handle basemap switching
+  const handleBasemapChange = (type: BasemapType) => {
+    setActiveBasemap(type);
+    if (!map.current) return;
+
+    const layers: Record<BasemapType, string> = {
+      satellite: 'esri-satellite-layer',
+      streets: 'osm-streets-layer',
+      dark: 'carto-dark-layer',
+    };
+
+    Object.entries(layers).forEach(([bType, layerId]) => {
+      if (map.current?.getLayer(layerId)) {
+        map.current.setLayoutProperty(
+          layerId,
+          'visibility',
+          bType === type ? 'visible' : 'none'
+        );
+      }
+    });
+  };
+
+  // Reset View to Nepal valley
+  const resetCamera = () => {
+    if (!map.current) return;
+    map.current.flyTo({
+      center: [85.27, 28.08],
+      zoom: 10.8,
+      essential: true,
+    });
+  };
 
   // Toggle layer visibility
   const toggleLayer = (layerKey: keyof typeof layersState, layerIds: string[]) => {
@@ -185,12 +276,86 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
     });
   };
 
+  // Save custom API key
+  const handleSaveApiKey = () => {
+    if (customApiKey.trim()) {
+      localStorage.setItem('floodsight_maptiler_key', customApiKey.trim());
+      setSavedKeySuccess(true);
+      setTimeout(() => setSavedKeySuccess(false), 2500);
+    } else {
+      localStorage.removeItem('floodsight_maptiler_key');
+      setSavedKeySuccess(false);
+    }
+  };
+
   return (
-    <div className="relative w-full h-[520px] rounded-xl overflow-hidden border border-slate-800 shadow-md">
+    <div className="relative w-full h-[540px] rounded-xl overflow-hidden border border-slate-800 shadow-md">
+      {/* Map Container */}
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Floating Layer Control Box */}
-      <div className="absolute top-4 left-4 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-lg p-3 shadow-lg z-10 w-64 text-xs">
+      {/* Top Controls Bar: Basemap Switcher + Reset + API Info */}
+      <div className="absolute top-3 right-14 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-lg p-1 shadow-lg z-10">
+        <div className="flex items-center text-xs space-x-1">
+          <button
+            onClick={() => handleBasemapChange('satellite')}
+            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+              activeBasemap === 'satellite'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+            title="High-resolution Earth observation satellite basemap"
+          >
+            <span>🛰️</span>
+            <span>Satellite</span>
+          </button>
+          <button
+            onClick={() => handleBasemapChange('streets')}
+            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+              activeBasemap === 'streets'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+            title="OpenStreetMap standard roads & topography"
+          >
+            <span>🗺️</span>
+            <span>Streets</span>
+          </button>
+          <button
+            onClick={() => handleBasemapChange('dark')}
+            className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+              activeBasemap === 'dark'
+                ? 'bg-blue-600 text-white font-medium shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+            title="Dark Matter contrast basemap"
+          >
+            <span>🌙</span>
+            <span>Dark</span>
+          </button>
+        </div>
+
+        <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+        <button
+          onClick={resetCamera}
+          className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors"
+          title="Reset View to Valley Focus"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={() => setShowApiInfoModal(true)}
+          className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-slate-800 rounded transition-colors flex items-center gap-1 text-xs font-medium"
+          title="Map API details & Key settings"
+        >
+          <Info className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Map API Info</span>
+        </button>
+      </div>
+
+      {/* Floating Disaster Layers Panel */}
+      <div className="absolute top-3 left-3 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-lg p-3 shadow-lg z-10 w-64 text-xs">
         <div className="flex items-center gap-1.5 font-bold text-slate-200 border-b border-slate-800 pb-2 mb-2">
           <Layers className="w-4 h-4 text-blue-400" />
           <span>Interactive Disaster Layers</span>
@@ -262,6 +427,116 @@ export const MapViewer: React.FC<MapViewerProps> = ({ result }) => {
           </span>
         </div>
       </div>
+
+      {/* Map API Information & Key Configuration Modal */}
+      {showApiInfoModal && (
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-30 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 shadow-2xl relative space-y-4 text-xs text-slate-300">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-400" />
+                <h3 className="text-sm font-semibold text-slate-100">Map Architecture & API Details</h3>
+              </div>
+              <button
+                onClick={() => setShowApiInfoModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-800/70 rounded-lg border border-slate-700/60 space-y-1.5">
+                <p className="font-semibold text-blue-300 flex items-center gap-1.5">
+                  <span>⚡</span> Map Engine: MapLibre GL JS (WebGL 2D/3D)
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  The application uses <b>MapLibre GL JS</b>, an open-source, high-performance GPU-accelerated WebGL mapping library (open fork of Mapbox GL). It renders multi-layer vector/raster satellite tiles natively in the browser.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-800/70 rounded-lg border border-slate-700/60 space-y-1.5">
+                <p className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <span>✅</span> Basemap API (100% Free & Open Access — No API Key Required)
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  Currently, the platform uses <b>Esri World Imagery (Satellite)</b> and <b>OpenStreetMap Standard</b> raster tile servers. These are open, free, and require <b>zero API keys or credit card registration</b>.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-800/70 rounded-lg border border-slate-700/60 space-y-2">
+                <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Where to get a Custom Map API Key?</span>
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  If you want ultra-high-resolution 3D vector terrain or custom map styles, you can obtain a free API key from:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-300">
+                  <li>
+                    <a
+                      href="https://cloud.maptiler.com/account/keys/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 underline hover:text-blue-300 inline-flex items-center gap-1"
+                    >
+                      MapTiler Cloud <ExternalLink className="w-3 h-3" />
+                    </a>{' '}
+                    — Free tier allows 100,000 tile requests/month forever.
+                  </li>
+                  <li>
+                    <a
+                      href="https://account.mapbox.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 underline hover:text-blue-300 inline-flex items-center gap-1"
+                    >
+                      Mapbox <ExternalLink className="w-3 h-3" />
+                    </a>{' '}
+                    — Free tier allows 50,000 vector tile requests/month.
+                  </li>
+                </ul>
+
+                {/* Optional Key Input */}
+                <div className="pt-2 border-t border-slate-700/60">
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Enter Optional MapTiler API Key (Optional):
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. your_maptiler_api_key"
+                      value={customApiKey}
+                      onChange={(e) => setCustomApiKey(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={handleSaveApiKey}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium transition-colors flex items-center gap-1"
+                    >
+                      {savedKeySuccess ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : 'Save'}
+                    </button>
+                  </div>
+                  {savedKeySuccess && (
+                    <p className="text-emerald-400 text-[11px] mt-1">
+                      Key saved to browser localStorage!
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setShowApiInfoModal(false)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
