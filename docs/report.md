@@ -1,5 +1,5 @@
 # FloodSight AI: Tactical Satellite Decision-Support for Glacial Outburst Floods & Settlement Isolation
-**Technical Report — IIT Mandi Multimodal AI Hackathon 2026 (Track B)**  
+**Technical Report — Multimodal AI Hackathon 2026 (Track B)**  
 **Author**: Nirman Amrawanshi & Team  
 **Institution**: Indian Institute of Information Technology, Nagpur (IIITN)
 

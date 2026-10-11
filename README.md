@@ -1,5 +1,5 @@
 # 🛰️ FloodSight AI — Mapping Flood Damage from Space
-### IIT Mandi Multimodal AI Hackathon 2026 — Track B
+### Multimodal AI Hackathon 2026 — Track B
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.14-EE4C2C?logo=pytorch)](https://pytorch.org)

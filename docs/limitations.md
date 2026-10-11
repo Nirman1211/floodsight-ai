@@ -1,6 +1,6 @@
 # Operational Limitations & Scientific Honesty
 **Project: FloodSight AI**  
-**IIT Mandi Multimodal AI Hackathon 2026 — Track B**
+**Multimodal AI Hackathon 2026 — Track B**
 
 ---
 

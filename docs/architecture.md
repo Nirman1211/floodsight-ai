@@ -1,6 +1,6 @@
 # Architecture Specification: FloodSight AI
 **Project: FloodSight AI — Mapping Flood Damage from Space**  
-**Hackathon: IIT Mandi Multimodal AI Hackathon 2026**
+**Hackathon: Multimodal AI Hackathon 2026**
 
 ---
 

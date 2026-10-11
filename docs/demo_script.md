@@ -1,5 +1,5 @@
 # 3-Minute Demo Video Script: FloodSight AI
-**IIT Mandi Multimodal AI Hackathon 2026 — Track B**  
+**Multimodal AI Hackathon 2026 — Track B**  
 **Total Target Duration: 180 seconds (3:00 minutes)**
 
 ---

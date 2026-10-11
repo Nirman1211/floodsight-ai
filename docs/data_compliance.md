@@ -1,6 +1,6 @@
 # Data Compliance and Licensing Policy
 **Project: FloodSight AI**  
-**Hackathon: IIT Mandi Multimodal AI Hackathon 2026 — Track B**
+**Hackathon: Multimodal AI Hackathon 2026 — Track B**
 
 ---
 
@@ -56,4 +56,4 @@ Every generated map layer, GeoJSON export, dashboard visualization, and situatio
 | OpenStreetMap Snapshot | OSM Foundation / ohsome | ODbL (Open Database License) | Pre-event infrastructure |
 | Kuro Siwo Dataset | Orion-AI-Lab | MIT License | ML model training |
 | EMSR927 Reference | Copernicus EMS | Free of charge (credit required) | Post-hoc validation only |
-| FloodSight AI Codebase | IIT Mandi Hackathon Team | MIT License | Full application code |
+| FloodSight AI Codebase | FloodSight AI Team | MIT License | Full application code |

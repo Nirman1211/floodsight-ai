@@ -1,6 +1,6 @@
 # Data Sources & Acquisition Registry
 **Project: FloodSight AI**  
-**Hackathon: IIT Mandi Multimodal AI Hackathon 2026 — Track B**
+**Hackathon: Multimodal AI Hackathon 2026 — Track B**
 
 ---
 

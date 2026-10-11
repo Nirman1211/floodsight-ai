@@ -1,6 +1,6 @@
 # Scientific Research & Remote Sensing Foundations
 **Project: FloodSight AI**  
-**Track: IIT Mandi Multimodal AI Hackathon 2026 — Track B**
+**Track: Multimodal AI Hackathon 2026 — Track B**
 
 ---
 
