@@ -18,5 +18,6 @@ dist/
 # Binaries & Checkpoints
 cloudflared.exe
 *.log
+*.db
 ml/checkpoints/*.pt
 backend/data/reports/*.pdf

@@ -5,6 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.endpoints import router as api_router
+from app.db.database import init_db
+
+# Initialize persistent SQLite database
+init_db()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

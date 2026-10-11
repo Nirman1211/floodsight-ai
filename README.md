@@ -45,7 +45,7 @@ In high-altitude alpine disasters:
 graph TD
     classDef space fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
     classDef ai fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
-    classDef graph fill:#1e293b,stroke:#f43f5e,stroke-width:2px,color:#ffffff;
+    classDef topoGraph fill:#1e293b,stroke:#f43f5e,stroke-width:2px,color:#ffffff;
     classDef delivery fill:#022c22,stroke:#34d399,stroke-width:2px,color:#ffffff;
 
     subgraph Tier1["🛰️ TIER 1: ORBITAL SENSOR INGESTION LAYER"]
@@ -63,10 +63,10 @@ graph TD
     end
 
     subgraph Tier3["🌐 TIER 3: TOPOLOGICAL GRAPH & REACHABILITY ENGINE"]
-        Overlay["Geometric Spatial Overlay<br/>(Flood Polygon ∩ Road/Bridge Corridors)"]:::graph
-        NX["NetworkX Topological Graph G=(V,E)<br/>(Dijkstra Reachability to Hospitals)"]:::graph
-        Iso["Baseline vs Newly Cut-Off Detection<br/>(Identifies Hospitals Severed by Landslides)"]:::graph
-        D8["Hydrological D8 Valley Descent<br/>(Downstream Slurry Path Tracing)"]:::graph
+        Overlay["Geometric Spatial Overlay<br/>(Flood Polygon ∩ Road/Bridge Corridors)"]:::topoGraph
+        NX["NetworkX Topological Graph G=(V,E)<br/>(Dijkstra Reachability to Hospitals)"]:::topoGraph
+        Iso["Baseline vs Newly Cut-Off Detection<br/>(Identifies Hospitals Severed by Landslides)"]:::topoGraph
+        D8["Hydrological D8 Valley Descent<br/>(Downstream Slurry Path Tracing)"]:::topoGraph
     end
 
     subgraph Tier4["💻 TIER 4: MISSION COMMAND & DELIVERY INTERFACE"]

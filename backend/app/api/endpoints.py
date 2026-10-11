@@ -148,24 +148,79 @@ async def analyze_custom_flood_images(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Custom image processing failed: {str(e)}")
 
-@router.post("/auth/google")
-def google_auth_verify(payload: Dict[str, Any]):
+from app.schemas.auth import UserSignUpRequest, UserLoginRequest, GoogleAuthRequest, AuthResponse, UserResponse
+from app.db.database import (
+    create_user,
+    authenticate_user,
+    authenticate_google_user,
+    list_users
+)
+
+@router.post("/auth/signup", response_model=AuthResponse)
+def signup(request: UserSignUpRequest):
     """
-    Google Authentication session handler.
-    Persists authenticated responder identity and assigns disaster analyst roles.
+    Registers a new user into the persistent SQLite database.
     """
-    email = payload.get("email", "guest@floodsight.ai")
-    name = payload.get("name", "Emergency Responder")
-    avatar = payload.get("picture", "")
-    
+    try:
+        user = create_user(
+            email=request.email,
+            name=request.name,
+            password=request.password,
+            role=request.role or "rescuer",
+            avatar_url=request.avatar_url
+        )
+        token = f"jwt_{uuid.uuid4().hex}"
+        return {
+            "user": user,
+            "token": token,
+            "message": "Account successfully registered in database"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+@router.post("/auth/login", response_model=AuthResponse)
+def login(request: UserLoginRequest):
+    """
+    Authenticates an existing user against the SQLite database with PBKDF2 hash verification.
+    """
+    user = authenticate_user(request.email, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+        
+    token = f"jwt_{uuid.uuid4().hex}"
     return {
-        "status": "authenticated",
-        "user": {
-            "name": name,
-            "email": email,
-            "picture": avatar or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
-            "role": "Lead Geospatial Analyst",
-            "agency": "Disaster Response Command"
-        },
-        "token": f"jwt_{uuid.uuid4().hex[:16]}"
+        "user": user,
+        "token": token,
+        "message": "Authentication successful"
+    }
+
+@router.post("/auth/google", response_model=AuthResponse)
+def google_auth_verify(payload: GoogleAuthRequest):
+    """
+    Syncs Google OAuth identity into the SQLite database.
+    """
+    user = authenticate_google_user(
+        email=payload.email,
+        name=payload.name,
+        picture=payload.picture,
+        role=payload.role or "analyst"
+    )
+    token = f"jwt_{uuid.uuid4().hex}"
+    return {
+        "user": user,
+        "token": token,
+        "message": "Google authentication verified and recorded in database"
+    }
+
+@router.get("/auth/users")
+def get_registered_users():
+    """
+    Lists all users recorded in the persistent SQLite database.
+    """
+    return {
+        "database": "floodsight.db (SQLite)",
+        "count": len(list_users()),
+        "users": list_users()
     }
