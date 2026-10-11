@@ -5,6 +5,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://used-geological-representatives-uniform.trycloudflare.com/api/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
