@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://used-geological-representatives-uniform.trycloudflare.com/api/$1"
+      "destination": "https://relative-sage-juice-endorsed.trycloudflare.com/api/$1"
     },
     {
       "source": "/(.*)",
