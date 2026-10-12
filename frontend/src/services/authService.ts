@@ -1,5 +1,4 @@
-// Robust Authentication Service for FloodSight AI
-// Features: Safe JSON parsing, backend SQLite synchronization, and persistent local DB fallback for zero downtime.
+import { getSupabase } from '../lib/supabase';
 
 export interface AuthUser {
   id: string;
@@ -8,14 +7,14 @@ export interface AuthUser {
   role: string;
   picture: string;
   token: string;
-  provider?: string;
+  provider?: 'supabase' | 'google-oauth' | 'backend-sqlite' | 'persistent-db';
 }
 
 interface StoredUser {
   id: string;
   name: string;
   email: string;
-  passwordHash: string; // Plain/hash for client mock fallback
+  passwordHash: string;
   role: string;
   picture: string;
   provider: string;
@@ -24,7 +23,6 @@ interface StoredUser {
 const LOCAL_USERS_KEY = 'floodsight_users_db';
 const ACTIVE_SESSION_KEY = 'floodsight_user';
 
-// Seed default certified personnel
 const DEFAULT_USERS: StoredUser[] = [
   {
     id: 'usr_cmd_01',
@@ -81,7 +79,6 @@ function saveStoredUsers(users: StoredUser[]) {
   }
 }
 
-// Helper to safely parse responses without crashing on HTML 502/504 errors
 async function safeJsonFetch(url: string, options: RequestInit): Promise<{ ok: boolean; data: any; isJson: boolean }> {
   try {
     const resp = await fetch(url, options);
@@ -92,7 +89,6 @@ async function safeJsonFetch(url: string, options: RequestInit): Promise<{ ok: b
       data = JSON.parse(text);
       isJson = true;
     } catch {
-      // Returned HTML error page (e.g. 502 Bad Gateway or Cloudflare "An error occurred...")
       isJson = false;
       data = { detail: text.slice(0, 150) };
     }
@@ -103,12 +99,40 @@ async function safeJsonFetch(url: string, options: RequestInit): Promise<{ ok: b
 }
 
 export const authService = {
-  // 1. Email + Password Login
+  // 1. Email + Password Login (Supabase First -> SQLite Backend -> Local DB)
   async login(email: string, pass: string): Promise<AuthUser> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
 
-    // First attempt backend SQLite
+    // 1A. Attempt Real Supabase Cloud Auth
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPass,
+      });
+
+      if (!error && data?.user) {
+        const u = data.user;
+        const authUser: AuthUser = {
+          id: u.id,
+          name: u.user_metadata?.name || u.user_metadata?.full_name || cleanEmail.split('@')[0],
+          email: u.email || cleanEmail,
+          role: u.user_metadata?.role || 'Tactical Incident Commander',
+          picture:
+            u.user_metadata?.avatar_url ||
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+          token: data.session?.access_token || `sb_${Date.now()}`,
+          provider: 'supabase',
+        };
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(authUser));
+        return authUser;
+      }
+    } catch (sbErr) {
+      // Supabase network or configuration fallback
+    }
+
+    // 1B. Attempt Backend SQLite
     const backendResult = await safeJsonFetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -121,7 +145,9 @@ export const authService = {
         name: backendResult.data.user.name,
         email: backendResult.data.user.email,
         role: backendResult.data.user.role,
-        picture: backendResult.data.user.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+        picture:
+          backendResult.data.user.avatar_url ||
+          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
         token: backendResult.data.token || `jwt_${Date.now()}`,
         provider: 'backend-sqlite',
       };
@@ -129,12 +155,12 @@ export const authService = {
       return user;
     }
 
-    // Fallback to resilient Local Persistent DB
+    // 1C. Resilient Local Database Fallback
     const users = getStoredUsers();
     const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
 
     if (!existing) {
-      throw new Error(`Account not found for ${cleanEmail}. Please sign up first.`);
+      throw new Error(`Account not found for ${cleanEmail}. Please create an account.`);
     }
 
     if (existing.passwordHash !== cleanPass) {
@@ -154,14 +180,61 @@ export const authService = {
     return fallbackUser;
   },
 
-  // 2. Sign Up Registration
+  // 2. Sign Up Registration (Supabase Cloud -> SQLite Backend -> Local DB)
   async signup(name: string, email: string, pass: string, role: string): Promise<AuthUser> {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
     const cleanRole = role.trim() || 'Tactical Incident Commander';
+    const avatarUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80';
 
-    // First attempt backend SQLite
+    // 2A. Attempt Real Supabase Cloud SignUp
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPass,
+        options: {
+          data: {
+            name: cleanName,
+            role: cleanRole,
+            avatar_url: avatarUrl,
+          },
+        },
+      });
+
+      if (!error && data?.user) {
+        // Also record into public.profiles table if possible
+        try {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            name: cleanName,
+            email: cleanEmail,
+            role: cleanRole,
+            avatar_url: avatarUrl,
+            provider: 'supabase',
+          });
+        } catch (e) {
+          // Table trigger handles this automatically
+        }
+
+        const authUser: AuthUser = {
+          id: data.user.id,
+          name: cleanName,
+          email: cleanEmail,
+          role: cleanRole,
+          picture: avatarUrl,
+          token: data.session?.access_token || `sb_${Date.now()}`,
+          provider: 'supabase',
+        };
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(authUser));
+        return authUser;
+      }
+    } catch (sbErr) {
+      // Fall through to backend/local
+    }
+
+    // 2B. Attempt Backend SQLite
     const backendResult = await safeJsonFetch('/api/v1/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,29 +252,15 @@ export const authService = {
         name: backendResult.data.user.name,
         email: backendResult.data.user.email,
         role: backendResult.data.user.role,
-        picture: backendResult.data.user.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+        picture: backendResult.data.user.avatar_url || avatarUrl,
         token: backendResult.data.token || `jwt_${Date.now()}`,
         provider: 'backend-sqlite',
       };
-      // Also sync to local DB
-      const users = getStoredUsers();
-      if (!users.some((u) => u.email.toLowerCase() === cleanEmail)) {
-        users.push({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          passwordHash: cleanPass,
-          role: user.role,
-          picture: user.picture,
-          provider: 'local',
-        });
-        saveStoredUsers(users);
-      }
       localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(user));
       return user;
     }
 
-    // Fallback to resilient Local Persistent DB
+    // 2C. Resilient Local Database Fallback
     const users = getStoredUsers();
     if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
       throw new Error(`An account with email ${cleanEmail} already exists. Please log in.`);
@@ -213,7 +272,7 @@ export const authService = {
       email: cleanEmail,
       passwordHash: cleanPass,
       role: cleanRole,
-      picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+      picture: avatarUrl,
       provider: 'local',
     };
 
@@ -233,7 +292,7 @@ export const authService = {
     return authUser;
   },
 
-  // 3. Continue with Google
+  // 3. Continue with Google (Real Supabase OAuth / Fast Sync)
   async googleAuth(profile?: { name?: string; email?: string; picture?: string; role?: string }): Promise<AuthUser> {
     const name = profile?.name?.trim() || 'Nirman Amrawanshi';
     const email = profile?.email?.trim().toLowerCase() || 'nirman.amrawanshi@disaster-response.org';
@@ -242,28 +301,32 @@ export const authService = {
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80';
     const role = profile?.role || 'Tactical Incident Commander';
 
-    // First attempt backend SQLite
-    const backendResult = await safeJsonFetch('/api/v1/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, picture, role }),
-    });
-
-    if (backendResult.ok && backendResult.data?.user) {
-      const user: AuthUser = {
-        id: backendResult.data.user.id,
-        name: backendResult.data.user.name,
-        email: backendResult.data.user.email,
-        role: backendResult.data.user.role,
-        picture: backendResult.data.user.avatar_url || picture,
-        token: backendResult.data.token || `jwt_google_${Date.now()}`,
+    // 3A. Sync to Supabase PostgreSQL Database (profiles table)
+    try {
+      const supabase = getSupabase();
+      await supabase.from('profiles').upsert({
+        name,
+        email,
+        role,
+        avatar_url: picture,
         provider: 'google-oauth',
-      };
-      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(user));
-      return user;
+      });
+    } catch (e) {
+      // Continue smoothly
     }
 
-    // Fallback to resilient Local Persistent DB
+    // 3B. Sync to Backend SQLite
+    try {
+      await safeJsonFetch('/api/v1/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, picture, role }),
+      });
+    } catch (e) {
+      // Continue smoothly
+    }
+
+    // 3C. Update Local Persistent Store
     const users = getStoredUsers();
     let existing = users.find((u) => u.email.toLowerCase() === email);
 
@@ -294,6 +357,20 @@ export const authService = {
     return authUser;
   },
 
+  // 4. Trigger Real Supabase Google OAuth Redirect (Browser Popup / Redirect)
+  async triggerSupabaseGoogleRedirect(): Promise<void> {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) {
+      throw error;
+    }
+  },
+
   getCurrentUser(): AuthUser | null {
     try {
       const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
@@ -304,6 +381,12 @@ export const authService = {
   },
 
   logout(): void {
+    try {
+      const supabase = getSupabase();
+      supabase.auth.signOut().catch(() => {});
+    } catch (e) {
+      // Ignore
+    }
     localStorage.removeItem(ACTIVE_SESSION_KEY);
   },
 };

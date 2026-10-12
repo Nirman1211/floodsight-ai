@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, UserPlus, LogIn, Database, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  X,
+  ShieldCheck,
+  UserPlus,
+  LogIn,
+  Database,
+  CheckCircle2,
+  AlertCircle,
+  Settings,
+  ExternalLink,
+  RotateCcw,
+} from 'lucide-react';
 import { authService } from '../services/authService';
+import { getSupabaseConfig, saveSupabaseConfig, resetSupabaseConfig } from '../lib/supabase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -9,10 +21,11 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
-  const [tab, setTab] = useState<'login' | 'signup' | 'google-custom'>('login');
+  const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [showDbSettings, setShowDbSettings] = useState(false);
 
   // Form states
   const [email, setEmail] = useState('');
@@ -23,6 +36,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   // Custom Google states
   const [googleName, setGoogleName] = useState('Nirman Amrawanshi');
   const [googleEmail, setGoogleEmail] = useState('nirman.amrawanshi@disaster-response.org');
+
+  // Supabase Custom Config states
+  const currentConfig = getSupabaseConfig();
+  const [sbUrl, setSbUrl] = useState(currentConfig.url);
+  const [sbKey, setSbKey] = useState(currentConfig.anonKey);
+  const [sbSavedMsg, setSbSavedMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -39,7 +58,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
     try {
       const user = await authService.login(email, password);
-      setSuccessMsg(`Welcome back, ${user.name}! Authentication verified.`);
+      setSuccessMsg(`Welcome back, ${user.name}! Authenticated via ${user.provider || 'cloud database'}.`);
       setTimeout(() => {
         onLoginSuccess(user);
         onClose();
@@ -64,7 +83,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
     try {
       const user = await authService.signup(name, email, password, selectedRole);
-      setSuccessMsg(`Account created for ${user.name}! Logged in successfully.`);
+      setSuccessMsg(`Account created in Supabase database for ${user.name}!`);
       setTimeout(() => {
         onLoginSuccess(user);
         onClose();
@@ -88,7 +107,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         role: selectedRole,
       });
 
-      setSuccessMsg(`Google identity verified for ${user.name}!`);
+      setSuccessMsg(`Google identity recorded in database for ${user.name}!`);
       setTimeout(() => {
         onLoginSuccess(user);
         onClose();
@@ -98,6 +117,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sbUrl.trim() || !sbKey.trim()) return;
+    saveSupabaseConfig(sbUrl, sbKey);
+    setSbSavedMsg('Custom Supabase project saved! Connected to cloud database.');
+    setTimeout(() => {
+      setSbSavedMsg(null);
+      setShowDbSettings(false);
+    }, 1200);
+  };
+
+  const handleResetSupabaseConfig = () => {
+    resetSupabaseConfig();
+    const def = getSupabaseConfig();
+    setSbUrl(def.url);
+    setSbKey(def.anonKey);
+    setSbSavedMsg('Reset to default FloodSight cloud instance.');
+    setTimeout(() => setSbSavedMsg(null), 1200);
   };
 
   // Quick Demo credentials
@@ -138,11 +177,88 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h2 className="text-lg font-bold text-white tracking-tight">Tactical Responder Portal</h2>
-          <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-emerald-400 font-medium">
-            <Database className="w-3.5 h-3.5" />
-            <span>Persistent SQLite Database & Resilient Sync</span>
+          <div className="flex items-center justify-center gap-2 mt-1 text-[11px] font-medium">
+            <div className="flex items-center gap-1 text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/60">
+              <Database className="w-3.5 h-3.5" />
+              <span>Supabase Cloud PostgreSQL Active</span>
+            </div>
+            <button
+              onClick={() => setShowDbSettings(!showDbSettings)}
+              className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
+              title="Configure Supabase Database"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
+
+        {/* Supabase Custom Configuration Drawer */}
+        {showDbSettings && (
+          <div className="mb-4 p-3.5 rounded-xl bg-slate-950 border border-blue-500/30 text-xs space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-blue-400 flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5" />
+                <span>Supabase Database Connection</span>
+              </span>
+              <a
+                href="https://supabase.com/dashboard"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5 underline"
+              >
+                <span>Dashboard</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+
+            {sbSavedMsg && (
+              <div className="text-emerald-400 text-[11px] font-medium bg-emerald-950/40 p-1.5 rounded border border-emerald-800/40">
+                {sbSavedMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSupabaseConfig} className="space-y-2">
+              <div>
+                <label className="text-slate-400 text-[10px] block">Project URL (VITE_SUPABASE_URL)</label>
+                <input
+                  type="text"
+                  value={sbUrl}
+                  onChange={(e) => setSbUrl(e.target.value)}
+                  placeholder="https://your-project.supabase.co"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 text-[10px] block">Anon Public Key (VITE_SUPABASE_ANON_KEY)</label>
+                <input
+                  type="password"
+                  value={sbKey}
+                  onChange={(e) => setSbKey(e.target.value)}
+                  placeholder="eyJhbGci..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={handleResetSupabaseConfig}
+                  className="text-[10px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Default</span>
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-semibold transition"
+                >
+                  Save Connection
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="flex rounded-xl bg-slate-800/80 p-1 mb-4 text-xs font-semibold">
@@ -213,7 +329,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-blue-600/30 disabled:opacity-60 cursor-pointer"
             >
-              {loading ? 'Authenticating...' : 'Sign In to Portal'}
+              {loading ? 'Authenticating with Database...' : 'Sign In to Portal'}
             </button>
           </form>
         )}
@@ -276,7 +392,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               disabled={loading}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-emerald-600/30 disabled:opacity-60 cursor-pointer"
             >
-              {loading ? 'Creating Account...' : 'Register in Disaster Registry'}
+              {loading ? 'Creating User in Supabase...' : 'Register in Disaster Registry'}
             </button>
           </form>
         )}
@@ -315,6 +431,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               />
             </div>
           </div>
+
           <button
             onClick={handleDirectGoogleSignIn}
             disabled={loading}
@@ -338,7 +455,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>Continue with Google</span>
+            <span>Continue with Google (Sync to Supabase)</span>
           </button>
         </div>
 

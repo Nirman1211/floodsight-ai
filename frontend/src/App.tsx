@@ -13,6 +13,8 @@ import { defaultResult } from './data/defaultResult';
 import type { AnalysisResult } from './types/analysis';
 import { ShieldCheck, AlertOctagon, FileText, Download, Award } from 'lucide-react';
 
+import { getSupabase } from './lib/supabase';
+
 export const App: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -22,7 +24,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('map');
   const [user, setUser] = useState<{ name: string; email: string; picture: string; role: string } | null>(null);
 
-  // Load user from localStorage if present
+  // Load user from localStorage & Supabase Cloud Auth
   useEffect(() => {
     const saved = localStorage.getItem('floodsight_user');
     if (saved) {
@@ -32,10 +34,37 @@ export const App: React.FC = () => {
         localStorage.removeItem('floodsight_user');
       }
     }
+
+    try {
+      const supabase = getSupabase();
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          const u = session.user;
+          const authUser = {
+            name: u.user_metadata?.name || u.user_metadata?.full_name || u.email?.split('@')[0] || 'Responder',
+            email: u.email || '',
+            picture:
+              u.user_metadata?.avatar_url ||
+              'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+            role: u.user_metadata?.role || 'Tactical Incident Commander',
+          };
+          setUser(authUser);
+          localStorage.setItem('floodsight_user', JSON.stringify(authUser));
+        }
+      });
+      return () => {
+        authListener.subscription.unsubscribe();
+      };
+    } catch (e) {
+      // Supabase listener gracefully silent
+    }
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('floodsight_user');
+    try {
+      getSupabase().auth.signOut().catch(() => {});
+    } catch (e) {}
     setUser(null);
   };
 
