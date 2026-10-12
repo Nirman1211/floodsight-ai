@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, ShieldCheck, UserPlus, LogIn, Database, CheckCircle2, AlertCircle } from 'lucide-react';
+import { authService } from '../services/authService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -8,7 +9,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
-  const [tab, setTab] = useState<'login' | 'signup'>('login');
+  const [tab, setTab] = useState<'login' | 'signup' | 'google-custom'>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -18,6 +19,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [selectedRole, setSelectedRole] = useState('Tactical Incident Commander');
+
+  // Custom Google states
+  const [googleName, setGoogleName] = useState('Nirman Amrawanshi');
+  const [googleEmail, setGoogleEmail] = useState('nirman.amrawanshi@disaster-response.org');
 
   if (!isOpen) return null;
 
@@ -33,25 +38,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     setSuccessMsg(null);
 
     try {
-      const resp = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
-      });
-
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.detail || 'Login failed. Please check your credentials.');
-      }
-
-      setSuccessMsg('Authentication successful! Logged in from SQLite database.');
-      localStorage.setItem('floodsight_user', JSON.stringify(data.user));
+      const user = await authService.login(email, password);
+      setSuccessMsg(`Welcome back, ${user.name}! Authentication verified.`);
       setTimeout(() => {
-        onLoginSuccess(data.user);
+        onLoginSuccess(user);
         onClose();
-      }, 700);
+      }, 600);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Unable to connect to database.');
+      setErrorMsg(err.message || 'Unable to authenticate. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -69,63 +63,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     setSuccessMsg(null);
 
     try {
-      const resp = await fetch('/api/v1/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          password: password.trim(),
-          role: selectedRole,
-        }),
-      });
-
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.detail || 'Registration failed.');
-      }
-
-      setSuccessMsg('Account registered in SQLite database! Logging in...');
-      localStorage.setItem('floodsight_user', JSON.stringify(data.user));
+      const user = await authService.signup(name, email, password, selectedRole);
+      setSuccessMsg(`Account created for ${user.name}! Logged in successfully.`);
       setTimeout(() => {
-        onLoginSuccess(data.user);
+        onLoginSuccess(user);
         onClose();
-      }, 700);
+      }, 600);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed.');
+      setErrorMsg(err.message || 'Registration failed. Please try another email.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleDirectGoogleSignIn = async () => {
     setLoading(true);
     setErrorMsg(null);
-    try {
-      const googleProfile = {
-        name: 'Nirman Amrawanshi',
-        email: 'nirman.amrawanshi@disaster-response.org',
-        picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
-        role: selectedRole,
-      };
+    setSuccessMsg(null);
 
-      const resp = await fetch('/api/v1/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(googleProfile),
+    try {
+      const user = await authService.googleAuth({
+        name: googleName.trim() || 'Nirman Amrawanshi',
+        email: googleEmail.trim() || 'nirman.amrawanshi@disaster-response.org',
+        role: selectedRole,
       });
 
-      const data = await resp.json();
-      if (!resp.ok) throw new Error('Google authentication failed.');
-
-      localStorage.setItem('floodsight_user', JSON.stringify(data.user));
-      setSuccessMsg('Google identity recorded in SQLite database!');
+      setSuccessMsg(`Google identity verified for ${user.name}!`);
       setTimeout(() => {
-        onLoginSuccess(data.user);
+        onLoginSuccess(user);
         onClose();
-      }, 700);
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Google Auth error');
+      }, 600);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Google authentication error.');
     } finally {
       setLoading(false);
     }
@@ -146,12 +115,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     setErrorMsg(null);
   };
 
+  const fillNirmanDemo = () => {
+    setEmail('nirman@floodsight.org');
+    setPassword('Nirman2026!');
+    setTab('login');
+    setErrorMsg(null);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-slate-200">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-1 rounded-lg hover:bg-slate-800"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-1 rounded-lg hover:bg-slate-800 cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -164,7 +140,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           <h2 className="text-lg font-bold text-white tracking-tight">Tactical Responder Portal</h2>
           <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-emerald-400 font-medium">
             <Database className="w-3.5 h-3.5" />
-            <span>Real SQLite Database: backend/data/floodsight.db</span>
+            <span>Persistent SQLite Database & Resilient Sync</span>
           </div>
         </div>
 
@@ -172,7 +148,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         <div className="flex rounded-xl bg-slate-800/80 p-1 mb-4 text-xs font-semibold">
           <button
             onClick={() => { setTab('login'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
               tab === 'login' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -181,7 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           </button>
           <button
             onClick={() => { setTab('signup'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
               tab === 'signup' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -192,15 +168,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
         {/* Notifications */}
         {errorMsg && (
-          <div className="mb-3 p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="mb-3 p-2.5 rounded-lg bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-3 p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <div className="mb-3 p-2.5 rounded-lg bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
             <span>{successMsg}</span>
           </div>
         )}
@@ -235,9 +211,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-blue-600/30 disabled:opacity-60"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-blue-600/30 disabled:opacity-60 cursor-pointer"
             >
-              {loading ? 'Verifying with Database...' : 'Sign In to Portal'}
+              {loading ? 'Authenticating...' : 'Sign In to Portal'}
             </button>
           </form>
         )}
@@ -252,7 +228,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Dr. Maya Sharma"
+                placeholder="Nirman Amrawanshi"
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -264,7 +240,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="m.sharma@disaster-response.org"
+                placeholder="nirman@disaster-response.org"
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -298,9 +274,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-emerald-600/30 disabled:opacity-60"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition text-xs shadow-lg shadow-emerald-600/30 disabled:opacity-60 cursor-pointer"
             >
-              {loading ? 'Creating User in Database...' : 'Register in SQLite Database'}
+              {loading ? 'Creating Account...' : 'Register in Disaster Registry'}
             </button>
           </form>
         )}
@@ -316,40 +292,64 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         </div>
 
         {/* Continue with Google */}
-        <button
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          className="w-full bg-white hover:bg-slate-100 text-slate-800 font-semibold px-4 py-2 rounded-xl flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition text-xs disabled:opacity-60"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
-          </svg>
-          <span>Continue with Google</span>
-        </button>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div>
+              <label className="text-slate-400 block mb-0.5">Google Name</label>
+              <input
+                type="text"
+                value={googleName}
+                onChange={(e) => setGoogleName(e.target.value)}
+                placeholder="Nirman Amrawanshi"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-slate-400 block mb-0.5">Google Email</label>
+              <input
+                type="email"
+                value={googleEmail}
+                onChange={(e) => setGoogleEmail(e.target.value)}
+                placeholder="user@gmail.com"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleDirectGoogleSignIn}
+            disabled={loading}
+            className="w-full bg-white hover:bg-slate-100 text-slate-800 font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition text-xs disabled:opacity-60 cursor-pointer"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+        </div>
 
         {/* Quick Demo Pre-fills */}
-        <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
           <span>Quick Demo Logins:</span>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={fillCommanderDemo}
-              className="text-blue-400 hover:text-blue-300 underline"
+              className="text-blue-400 hover:text-blue-300 underline cursor-pointer"
             >
               Commander
             </button>
@@ -357,9 +357,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             <button
               type="button"
               onClick={fillRescuerDemo}
-              className="text-emerald-400 hover:text-emerald-300 underline"
+              className="text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
             >
               Rescuer
+            </button>
+            <span className="text-slate-600">•</span>
+            <button
+              type="button"
+              onClick={fillNirmanDemo}
+              className="text-amber-400 hover:text-amber-300 underline cursor-pointer"
+            >
+              Nirman
             </button>
           </div>
         </div>
@@ -367,3 +375,5 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     </div>
   );
 };
+
+export default AuthModal;
